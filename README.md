@@ -1,39 +1,37 @@
-# 🚀 VIBE Server (Backend API)
+# VIBE Server (Backend API)
 
 [![Node.js](https://img.shields.io/badge/Node.js-v18%2B-green.svg)](https://nodejs.org/)
 [![Express.js](https://img.shields.io/badge/Express-v5-blue.svg)](https://expressjs.com/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose-brightgreen.svg)](https://mongoosejs.com/)
 [![License](https://img.shields.io/badge/license-ISC-orange.svg)]()
 
-**VIBE Server** is the high-performance, resilient RESTful backend engine for the VIBE Platform (Verified Internship & Mentorship System). It provides multi-role authentication (Students, Faculty, Industry Experts), challenge management (Task Mania), mentorship request lifecycle, social community feed, and virtual resume generation.
+**VIBE Server** is the RESTful backend engine for the VIBE Platform (Verified Internship & Mentorship System). It provides multi-role authentication (Students, Faculty, Industry Experts), challenge management (Task Mania), mentorship request lifecycle, social community feed, and virtual resume generation.
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
-- 🔐 **Multi-Role Authentication**: JWT access & refresh token rotation, bcrypt password hashing, 6-digit OTP verification via email.
-- ⚡ **Resilient Server Startup & Database Auto-Fallback**: Server starts immediately regardless of remote database status and automatically falls back to local MongoDB (`mongodb://127.0.0.1:27017/vibedatabase`) if primary URI is unavailable.
-- 🎯 **Task Mania (Challenges)**: Industry experts post verified real-world tasks; students review and submit solutions.
-- 👨‍🏫 **Mentorship Requests**: Students send mentorship requests to verified faculty mentors; faculty can approve/reject requests.
-- 💬 **Community Feed**: Posts, comments, and upvoting/vibe score tracking for peer engagement.
-- 📄 **Virtual Resume Engine**: Dynamic user profile summary and portfolio generation.
-- ☁️ **Media Uploads**: Cloudinary integration for attachment & asset storage via Multer.
-- 🩺 **Health Check & Diagnostics**: `/api/v1/health` endpoint for monitoring backend and database connectivity.
+- **Multi-Role Authentication**: JWT access & refresh token rotation, bcrypt password hashing, and 6-digit OTP verification via email.
+- **Resilient Server Startup & Database Auto-Fallback**: Server starts immediately regardless of remote database status and automatically falls back to local MongoDB (`mongodb://127.0.0.1:27017/vibedatabase`) if primary URI is unavailable.
+- **Task Mania (Challenges)**: Industry experts post verified real-world tasks; students review and submit solutions.
+- **Mentorship Requests**: Students send mentorship requests to verified faculty mentors; faculty can approve or reject requests.
+- **Community Feed**: Posts, comments, and upvoting/vibe score tracking for peer engagement.
+- **Virtual Resume Engine**: Dynamic user profile summary and portfolio generation.
+- **Media Uploads**: Cloudinary integration for attachment & asset storage via Multer.
+- **Health Check & Diagnostics**: `/api/v1/health` endpoint for monitoring backend and database connectivity.
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
+```mermaid
 flowchart TD
-``` memaid
-    CLIENT["VIBE Client<br/>React + Vite"]
+    CLIENT["VIBE Client (React + Vite)"]
 
-    subgraph SERVER["VIBE Backend Server - Port 8000"]
+    subgraph SERVER["VIBE Backend Server (Port 8000)"]
         APP["Express Application"]
-
-        MW["Middleware Layer<br/>CORS + Cookies + Auth"]
-
-        ROUTES["API Routes<br/>/api/v1"]
+        MW["Middleware Layer (CORS + Cookies + Auth)"]
+        ROUTES["API Routes (/api/v1)"]
 
         USER_ROUTE["User Routes"]
         TASK_ROUTE["Task Routes"]
@@ -100,7 +98,7 @@ flowchart TD
     POST_CTRL -->|"Media Upload"| CLOUDINARY
 ```
 
-## 🔄 Authentication & OTP Sequence Flow
+## Authentication & OTP Sequence Flow
 
 ```mermaid
 sequenceDiagram
@@ -132,7 +130,7 @@ sequenceDiagram
 
 ---
 
-## 📁 Directory Structure
+## Directory Structure
 
 ```
 vibe-server/
@@ -182,7 +180,7 @@ vibe-server/
 
 ---
 
-## 🛠️ Environment Variables Setup
+## Environment Variables Setup
 
 Create a `.env` file in the root of `vibe-server`:
 
@@ -216,7 +214,7 @@ CLOUDINARY_API_SECRET=your_api_secret
 
 ---
 
-## ⚡ Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -243,26 +241,26 @@ CLOUDINARY_API_SECRET=your_api_secret
 
 ---
 
-## 📡 Main API Endpoints Summary
+## Main API Endpoints Summary
 
 | Method | Endpoint | Description | Auth Required |
 | :--- | :--- | :--- | :---: |
-| `GET` | `/api/v1/health` | Diagnostic check for server & database status | ❌ |
-| `POST` | `/api/v1/users/register` | Initiate registration & send 6-digit OTP email | ❌ |
-| `POST` | `/api/v1/users/verify-otp` | Verify OTP & complete user creation | ❌ |
-| `POST` | `/api/v1/users/login` | Authenticate user & receive JWT tokens | ❌ |
-| `GET` | `/api/v1/users/me` | Fetch authenticated user profile & role | 🔒 |
-| `GET` | `/api/v1/tasks` | Fetch all Task Mania challenges | 🔒 |
-| `POST` | `/api/v1/tasks` | Post a new industry task challenge | 🔒 |
-| `POST` | `/api/v1/submissions/submit` | Submit solution for a task challenge | 🔒 |
-| `POST` | `/api/v1/mentor-requests/request` | Submit mentorship request to faculty | 🔒 |
-| `GET` | `/api/v1/mentor-requests/faculty-requests` | Faculty view pending student requests | 🔒 |
-| `GET` | `/api/v1/posts` | Fetch community feed posts | ❌ |
-| `POST` | `/api/v1/posts/create` | Publish a post with optional attachments | 🔒 |
-| `GET` | `/api/v1/virtualresume/:userId` | Get generated Virtual Resume data | 🔒 |
+| `GET` | `/api/v1/health` | Diagnostic check for server & database status | No |
+| `POST` | `/api/v1/users/register` | Initiate registration & send 6-digit OTP email | No |
+| `POST` | `/api/v1/users/verify-otp` | Verify OTP & complete user creation | No |
+| `POST` | `/api/v1/users/login` | Authenticate user & receive JWT tokens | No |
+| `GET` | `/api/v1/users/me` | Fetch authenticated user profile & role | Yes |
+| `GET` | `/api/v1/tasks` | Fetch all Task Mania challenges | Yes |
+| `POST` | `/api/v1/tasks` | Post a new industry task challenge | Yes |
+| `POST` | `/api/v1/submissions/submit` | Submit solution for a task challenge | Yes |
+| `POST` | `/api/v1/mentor-requests/request` | Submit mentorship request to faculty | Yes |
+| `GET` | `/api/v1/mentor-requests/faculty-requests` | Faculty view pending student requests | Yes |
+| `GET` | `/api/v1/posts` | Fetch community feed posts | No |
+| `POST` | `/api/v1/posts/create` | Publish a post with optional attachments | Yes |
+| `GET` | `/api/v1/virtualresume/:userId` | Get generated Virtual Resume data | Yes |
 
 ---
 
-## 🛡️ License
+## License
 
 Distributed under the **ISC License**.
