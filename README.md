@@ -24,75 +24,80 @@
 
 ## 🏗️ System Architecture
 
-```mermaid
-graph TD
-    Client["Client (Vite / React Frontend)"]
-    
-    subgraph ExpressServer["VIBE Express Server (Port 8000)"]
-        App["Express Application (app.js)"]
-        CorsCookie["CORS & Cookie Parser Middleware"]
-        CheckDB["DB Connection Guard Middleware"]
-        
-        subgraph API_Routes["API Router Layer (/api/v1)"]
-            UserRoute["/users (Auth & Profile)"]
-            TaskRoute["/tasks (Task Mania)"]
-            SubRoute["/submissions (Task Submissions)"]
-            MentorRoute["/mentor-requests (Mentorship)"]
-            PostRoute["/posts (Community Feed)"]
-            ResumeRoute["/virtualresume (Virtual Resume)"]
-            HealthRoute["/health (System Health)"]
-        end
-        
-        subgraph Controllers["Controller Business Logic"]
-            UserCtrl["User Controller"]
-            TaskCtrl["Task Controller"]
-            SubCtrl["Submission Controller"]
-            MentorCtrl["Mentor Request Controller"]
-            PostCtrl["Post Controller"]
-            ResumeCtrl["Resume Controller"]
-        end
-        
-        subgraph DataLayer["Mongoose Models"]
-            UserModel["User & Profile Schemas"]
-            TaskModel["Task & Submission Schemas"]
-            MentorModel["Mentor Request Schema"]
-            PostModel["Post & Comment Schemas"]
-        end
+flowchart TD
+
+    CLIENT["VIBE Client<br/>React + Vite"]
+
+    subgraph SERVER["VIBE Backend Server - Port 8000"]
+        APP["Express Application"]
+
+        MW["Middleware Layer<br/>CORS + Cookies + Auth"]
+
+        ROUTES["API Routes<br/>/api/v1"]
+
+        USER_ROUTE["User Routes"]
+        TASK_ROUTE["Task Routes"]
+        SUB_ROUTE["Submission Routes"]
+        MENTOR_ROUTE["Mentor Request Routes"]
+        POST_ROUTE["Post Routes"]
+        RESUME_ROUTE["Virtual Resume Routes"]
+        HEALTH_ROUTE["Health Route"]
+
+        USER_CTRL["User Controller"]
+        TASK_CTRL["Task Controller"]
+        SUB_CTRL["Submission Controller"]
+        MENTOR_CTRL["Mentor Controller"]
+        POST_CTRL["Post Controller"]
+        RESUME_CTRL["Resume Controller"]
+
+        USER_MODEL["User + Profile Models"]
+        TASK_MODEL["Task + Submission Models"]
+        MENTOR_MODEL["Mentor Request Model"]
+        POST_MODEL["Post + Comment Models"]
     end
-    
-    subgraph ExternalServices["External Infrastructure"]
-        PrimaryMongoDB[("MongoDB Atlas (Cloud)")]
-        LocalMongoDB[("Local MongoDB (Fallback)")]
-        Cloudinary[("Cloudinary (Media Storage)")]
-        ZohoMail[("Zoho Mail (Email / OTP)")]
-      end
 
-    Client -->|HTTP / REST API| App
-    App --> CorsCookie
-    CorsCookie --> CheckDB
-    CheckDB --> API_Routes
-    
-    UserRoute --> UserCtrl
-    TaskRoute --> TaskCtrl
-    SubRoute --> SubCtrl
-    MentorRoute --> MentorCtrl
-    PostRoute --> PostCtrl
-    ResumeRoute --> ResumeCtrl
-    
-    UserCtrl --> UserModel
-    TaskCtrl --> TaskModel
-    SubCtrl --> TaskModel
-    MentorCtrl --> MentorModel
-    PostCtrl --> PostModel
-    ResumeCtrl --> UserModel
-    
-    DataLayer --> PrimaryMongoDB
-    DataLayer -.->|Fallback if Atlas Offline| LocalMongoDB
-    UserCtrl --> ZohoMail
-    PostCtrl --> Cloudinary
-```
+    subgraph SERVICES["External Services"]
+        ATLAS[("MongoDB Atlas")]
+        LOCAL[("Local MongoDB")]
+        CLOUDINARY["Cloudinary"]
+        EMAIL["Zoho Mail"]
+    end
 
----
+    CLIENT -->|"HTTP / REST API"| APP
+    APP --> MW
+    MW --> ROUTES
+
+    ROUTES --> USER_ROUTE
+    ROUTES --> TASK_ROUTE
+    ROUTES --> SUB_ROUTE
+    ROUTES --> MENTOR_ROUTE
+    ROUTES --> POST_ROUTE
+    ROUTES --> RESUME_ROUTE
+    ROUTES --> HEALTH_ROUTE
+
+    USER_ROUTE --> USER_CTRL
+    TASK_ROUTE --> TASK_CTRL
+    SUB_ROUTE --> SUB_CTRL
+    MENTOR_ROUTE --> MENTOR_CTRL
+    POST_ROUTE --> POST_CTRL
+    RESUME_ROUTE --> RESUME_CTRL
+
+    USER_CTRL --> USER_MODEL
+    TASK_CTRL --> TASK_MODEL
+    SUB_CTRL --> TASK_MODEL
+    MENTOR_CTRL --> MENTOR_MODEL
+    POST_CTRL --> POST_MODEL
+    RESUME_CTRL --> USER_MODEL
+
+    USER_MODEL --> ATLAS
+    TASK_MODEL --> ATLAS
+    MENTOR_MODEL --> ATLAS
+    POST_MODEL --> ATLAS
+
+    ATLAS -.->|"Fallback"| LOCAL
+
+    USER_CTRL -->|"OTP Email"| EMAIL
+    POST_CTRL -->|"Media Upload"| CLOUDINARY
 
 ## 🔄 Authentication & OTP Sequence Flow
 
