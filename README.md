@@ -25,7 +25,7 @@
 ## 🏗️ System Architecture
 
 flowchart TD
-
+``` memaid
     CLIENT["VIBE Client<br/>React + Vite"]
 
     subgraph SERVER["VIBE Backend Server - Port 8000"]
@@ -98,6 +98,7 @@ flowchart TD
 
     USER_CTRL -->|"OTP Email"| EMAIL
     POST_CTRL -->|"Media Upload"| CLOUDINARY
+```
 
 ## 🔄 Authentication & OTP Sequence Flow
 
