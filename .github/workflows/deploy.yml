@@ -98,17 +98,19 @@ jobs:
             echo "Restarting vibe-server via PM2..."
             pm2 reload ecosystem.config.cjs || pm2 start ecosystem.config.cjs
             pm2 save
-
-      - name: Health Check Endpoint
-        run: |
-          echo "Waiting 5 seconds for application startup..."
-          sleep 5
-          HEALTH_URL="http://${{ secrets.EC2_HOST }}:${{ secrets.PORT || 8000 }}/api/v1/health"
-          echo "Pinging health check endpoint: $HEALTH_URL"
-          RESPONSE=$(curl --silent --fail $HEALTH_URL || echo "FAILED")
-          if [[ "$RESPONSE" == "FAILED" ]]; then
-            echo "❌ Health check failed!"
-            exit 1
-          else
+            
+            echo "Waiting for local health endpoint to become ready..."
+            HEALTH_URL="http://127.0.0.1:${{ secrets.PORT || 8000 }}/api/v1/health"
+            for attempt in {1..12}; do
+              RESPONSE=$(curl --silent --show-error --fail --max-time 10 "$HEALTH_URL") && break
+              echo "Health check attempt $attempt failed, retrying in 5 seconds..."
+              sleep 5
+            done
+            
+            if [ -z "$RESPONSE" ]; then
+              echo "❌ Health check failed after retries!"
+              pm2 logs vibe-server --lines 100 --nostream || true
+              exit 1
+            fi
+            
             echo "✅ Health check passed successfully! Response: $RESPONSE"
-          fi
