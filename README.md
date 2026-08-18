@@ -264,3 +264,85 @@ CLOUDINARY_API_SECRET=your_api_secret
 ## License
 
 Distributed under the **ISC License**.
+
+---
+
+## AWS EC2 & GitHub Actions CI/CD Deployment Guide
+
+The `vibe-server` project includes an automated GitHub Actions workflow (`.github/workflows/deploy.yml`) that builds, tests, and deploys the backend application to an AWS EC2 instance using **SSH** and **PM2**.
+
+### 1. GitHub Repository Secrets Setup
+
+Navigate to **GitHub Repository Settings > Secrets and variables > Actions** and add the following secrets:
+
+#### AWS EC2 SSH Access Secrets
+| Secret Name | Description | Example Value |
+| :--- | :--- | :--- |
+| `EC2_HOST` | Public IPv4 Address or Elastic IP of EC2 | `54.210.12.34` |
+| `EC2_USER` | SSH Username for EC2 OS | `ubuntu` (or `ec2-user`) |
+| `EC2_SSH_KEY` | Private SSH Key (`.pem` file content) | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
+| `EC2_PORT` | *(Optional)* SSH Port | `22` |
+
+#### Application & Environment Secrets
+| Secret Name | Required? | Description | Example / Default |
+| :--- | :---: | :--- | :--- |
+| `PORT` | Optional | Backend Server HTTP Port | `8000` |
+| `MONGODB_URI` | **Yes** | MongoDB Atlas / Production URI | `mongodb+srv://user:pass@cluster.mongodb.net/vibedb` |
+| `CORS_ORIGIN` | **Yes** | Allowed CORS Origins | `http://localhost:3000,https://vibe-platform-zeta.vercel.app` |
+| `JWT_ACCESSTOKEN_SECRET` | **Yes** | JWT Access Token Secret Key | `super_secret_access_key` |
+| `JWT_ACCESSTOKEN_EXPIRY` | Optional | Access Token Expiry | `1d` |
+| `JWT_REFRESHTOKEN_SECRET` | **Yes** | JWT Refresh Token Secret Key | `super_secret_refresh_key` |
+| `JWT_REFRESHTOKEN_EXPIRY` | Optional | Refresh Token Expiry | `7d` |
+| `CLOUDINARY_CLOUD_NAME` | **Yes** | Cloudinary Cloud Name | `your_cloud_name` |
+| `CLOUDINARY_API_KEY` | **Yes** | Cloudinary API Key | `1234567890` |
+| `CLOUDINARY_API_SECRET` | **Yes** | Cloudinary API Secret | `abcdef123456` |
+| `ZOHO_REGION` | Optional | Zoho OAuth Region | `com` |
+| `ZOHO_REFRESH_TOKEN` | Optional | Zoho OAuth Refresh Token | `1000.xxxx.yyyy` |
+| `ZOHO_CLIENT_ID` | Optional | Zoho OAuth Client ID | `1000.zzzz` |
+| `ZOHO_CLIENT_SECRET` | Optional | Zoho OAuth Client Secret | `aaaaa...` |
+| `ZOHO_ACCOUNT_ID` | Optional | Zoho Account ID | `123456` |
+| `ZOHO_FROM_EMAIL` | Optional | Zoho Sender Email | `contact@curioteach.com` |
+| `SMTP_USER` | Optional | Brevo SMTP Login Email | `welcome@curioteach.com` |
+| `SMTP_KEY` | Optional | Brevo SMTP Key | `xsmtpsib-...` |
+
+---
+
+### 2. EC2 Server Prerequisites
+
+On your EC2 instance, make sure Node.js (v18+) and PM2 are installed:
+
+```bash
+# Update package list and install Node.js 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Install PM2 globally
+sudo npm install -g pm2
+
+# Ensure deployment directory exists and has correct permissions
+sudo mkdir -p /var/www/vibe-server
+sudo chown -R $USER:$USER /var/www/vibe-server
+```
+
+---
+
+### 3. Nginx Reverse Proxy Setup (Optional but Recommended)
+
+To expose the application on HTTP (Port 80) or HTTPS (Port 443):
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
