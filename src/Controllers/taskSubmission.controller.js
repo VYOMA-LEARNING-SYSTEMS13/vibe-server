@@ -5,7 +5,9 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { sendZohoEmail } from "../services/zohoMail.js";
+import { notify } from "../services/notify.js";
 import { User } from "../models/Users.js";
+import { isTaskExpired } from "../utils/taskExpiry.js";
 
 // Get all tasks
 export const getAllTasks = asyncHandler(async (req, res) => {
@@ -61,14 +63,37 @@ export const createSubmission = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Task not found");
   }
 
-  const submission = new TaskSubmission({...req.body, createdBy: req.user.id});
-  await submission.save();
+  // Enforce server-side deadline restriction for new submissions
+  if (isTaskExpired(task)) {
+    throw new ApiError(
+      400,
+      "This task's submission deadline has passed. New applications and submissions are closed."
+    );
+  }
 
-  task.submissions.push(submission._id);
-  await task.save();
+  let submission = await TaskSubmission.findOne({ taskId, createdBy: req.user.id });
+  if (submission) {
+    Object.assign(submission, req.body, {
+      status: "submitted",
+    });
+    await submission.save();
+  } else {
+    submission = new TaskSubmission({
+      ...req.body,
+      createdBy: req.user.id,
+      status: "submitted",
+    });
+    await submission.save();
+  }
+
+  if (!task.submissions.includes(submission._id)) {
+    task.submissions.push(submission._id);
+    await task.save();
+  }
 
 
   const user = await User.findById(task.createdBy);
+
 
 
 
@@ -80,7 +105,25 @@ export const createSubmission = asyncHandler(async (req, res) => {
   //   link : `https://www.curioteach.com/community/manage-tasks/${submission._id}`
   // })
 
+  // In-app notification for the task creator (fire-and-forget, skip self-submits)
+  if (task.createdBy && String(task.createdBy) !== String(req.user.id)) {
+    const creatorUser = await User.findById(task.createdBy).select("accountType");
+    const creatorRole = String(creatorUser?.accountType || "").trim().toLowerCase();
+    const destinationLink =
+      creatorRole === "faculty"
+        ? "/dashboard/faculty?view=tasks"
+        : "/dashboard/industry?tab=tasks";
 
+    await notify({
+      recipient: task.createdBy,
+      sender: req.user.id,
+      type: "submission_received",
+      title: "New submission received",
+      message: `${req.user?.name || "Someone"} submitted work for "${task.title || "your task"}"`,
+      link: destinationLink,
+      meta: { submissionId: submission._id, taskId: task._id },
+    });
+  }
 
   res.status(201).json(new ApiResponse(201, submission, "Submission created successfully"));
 });
@@ -97,7 +140,7 @@ export const updateSubmission = asyncHandler(async (req, res) => {
   const updatedSubmission = await TaskSubmission.findByIdAndUpdate(
     id,
     req.body,
-    { new: true, runValidators: true }
+    { returnDocument: "after", runValidators: true }
   )
     .populate("createdBy", "-password -otp")
     .populate("taskId");
@@ -114,27 +157,63 @@ export const updateSubmission = asyncHandler(async (req, res) => {
 
   // --- REVIEWED MAIL ---
   if (updatedSubmission.status === "reviewed") {
-    await sendBrevoEmail(mailId, "review", {
-      candidateName: candidate?.name,
-      taskTitle: task?.title,
-      score: updatedSubmission.score,
-      feedback: updatedSubmission.reviewFeedback,
-      reviewer: reviewer?.name,
-      reviewLink: `https://www.curioteach.com/submissions/${updatedSubmission._id}`,
-    });
+    try {
+      await sendBrevoEmail(mailId, "review", {
+        candidateName: candidate?.name,
+        taskTitle: task?.title,
+        score: updatedSubmission.score,
+        feedback: updatedSubmission.reviewFeedback,
+        reviewer: reviewer?.name,
+        reviewLink: `https://www.curioteach.com/submissions/${updatedSubmission._id}`,
+      });
+    } catch (mailErr) {
+      console.error("Review email failed:", mailErr.message || mailErr);
+    }
+
+    // In-app notification for the candidate (fire-and-forget)
+    if (candidate?._id) {
+      const taskRoute = (task?._id || task) ? `/tasks/${task?._id || task}` : "/dashboard/student?view=taskmania";
+      await notify({
+        recipient: candidate._id,
+        sender: req.user.id,
+        type: "submission_reviewed",
+        title: "Your submission was reviewed",
+        message: `${reviewer?.name || "A reviewer"} reviewed your work for "${task?.title || "a task"}"`,
+        link: taskRoute,
+        meta: { submissionId: updatedSubmission._id, taskId: task?._id || task },
+      });
+    }
   }
 
   // --- HIRED MAIL ---
   if (updatedSubmission.status === "hired") {
-    await sendZohoEmail(mailId, "hired", {
-      candidateName: candidate?.name,
-      roleOffered: task?.roleOffered,
-      packageRange: task?.packageRange,
-      companyName: task?.companyName,
-      skillsRequired: task?.skillsRequired,
-      hrContact: task?.createdBy?.email || "hr@curioteach.com",
-      detailsLink: `https://www.curioteach.com/offers/${updatedSubmission._id}`,
-    });
+    try {
+      await sendZohoEmail(mailId, "hired", {
+        candidateName: candidate?.name,
+        roleOffered: task?.roleOffered,
+        packageRange: task?.packageRange,
+        companyName: task?.companyName,
+        skillsRequired: task?.skillsRequired,
+        hrContact: task?.createdBy?.email || "hr@curioteach.com",
+        detailsLink: `https://www.curioteach.com/offers/${updatedSubmission._id}`,
+      });
+    } catch (mailErr) {
+      console.error("Hired email failed:", mailErr.message || mailErr);
+    }
+
+    // In-app notification for the candidate (fire-and-forget)
+    if (candidate?._id) {
+      const taskRoute = (task?._id || task) ? `/tasks/${task?._id || task}` : "/dashboard/student?view=taskmania";
+      await notify({
+        recipient: candidate._id,
+        sender: req.user.id,
+        type: "hired",
+        title: "You're hired!",
+        message: `Congratulations! You were hired for "${task?.roleOffered || task?.title || "a role"}" at ${task?.companyName || "a company"}`,
+        link: taskRoute,
+        meta: { submissionId: updatedSubmission._id, taskId: task?._id || task },
+      });
+    }
   }
 
   res
@@ -199,13 +278,14 @@ export const getSubmissionById = asyncHandler(async (req, res) => {
 });
 
 export const getMySubmissions = asyncHandler(async (req, res) => {
-  const submissions = await TaskSubmission.find({ createdBy: req.user.id })
+  const targetUserId = req.params.userId || req.user.id || req.user._id;
+  const submissions = await TaskSubmission.find({ createdBy: targetUserId })
     .populate({
       path: "taskId",
-      select: "title companyName roleOffered lastDateToSubmit createdBy",
-      populate: { path: "createdBy", select: "name Profile", populate: { path: "Profile", select: "InstituteName" } },
+      select: "title companyName roleOffered lastDateToSubmit createdBy packageRange location description",
+      populate: { path: "createdBy", select: "name Profile", populate: { path: "Profile", select: "InstituteName avatar" } },
     });
-  res.status(200).json(new ApiResponse(200, submissions, "My submissions fetched successfully"));
+  res.status(200).json(new ApiResponse(200, submissions || [], "Submissions fetched successfully"));
 });
 
 export const applyForTask = asyncHandler(async (req, res) => {
@@ -213,14 +293,35 @@ export const applyForTask = asyncHandler(async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(taskId)) {
     throw new ApiError(400, "Invalid task ID");
   }
+
+  const task = await TaskMania.findById(taskId);
+  if (!task) {
+    throw new ApiError(404, "Task not found");
+  }
+
+  // Enforce server-side deadline restriction for new submissions
+  if (isTaskExpired(task)) {
+    throw new ApiError(
+      400,
+      "This task's submission deadline has passed. New applications and submissions are closed."
+    );
+  }
+
   const existing = await TaskSubmission.findOne({ taskId, createdBy: req.user.id });
   if (existing) {
-    return res.status(200).json(new ApiResponse(200, existing, "Already applied"));
+    return res.status(200).json(new ApiResponse(200, existing, "Task already accepted"));
   }
+
   const sub = await TaskSubmission.create({
     taskId,
     createdBy: req.user.id,
-    status: "applied",
+    status: "accepted",
   });
-  res.status(201).json(new ApiResponse(201, sub, "Application created"));
+
+  if (!task.submissions.includes(sub._id)) {
+    task.submissions.push(sub._id);
+    await task.save();
+  }
+
+  res.status(201).json(new ApiResponse(201, sub, "Task accepted successfully"));
 });

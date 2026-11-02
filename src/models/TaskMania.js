@@ -39,6 +39,34 @@ const taskManiaSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    materials: [
+      {
+        name: {
+          type: String,
+          required: true,
+        },
+        url: {
+          type: String,
+          required: true,
+        },
+        publicId: {
+          type: String,
+          default: "",
+        },
+        format: {
+          type: String,
+          default: "",
+        },
+        resourceType: {
+          type: String,
+          default: "auto",
+        },
+        size: {
+          type: Number,
+          default: 0,
+        },
+      },
+    ],
     perks: {
       type: String,
       default: "",

@@ -50,6 +50,26 @@ const userSchema = new mongoose.Schema(
       type: String,
       default:"",
     },
+    skills: [
+      {
+        name: {
+          type: String,
+          trim: true,
+        },
+        category: {
+          type: String,
+          default: "Technical",
+        },
+        level: {
+          type: String,
+          default: "Intermediate",
+        },
+        verified: {
+          type: Boolean,
+          default: true,
+        },
+      },
+    ],
     Profile:{
       type: mongoose.Schema.Types.ObjectId,
       ref: "Profile",
@@ -78,6 +98,10 @@ const userSchema = new mongoose.Schema(
       expiresAt: { 
         type: Date  // Expiration time for the OTP
       },    
+      attempts: {
+        type: Number,
+        default: 0
+      }
     },
     isVerified: {
       type: Boolean,
@@ -94,7 +118,48 @@ const userSchema = new mongoose.Schema(
     currentToken:{
       type: String,
       default: null
-    }
+    },
+    bookmarks: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Post",
+      },
+    ],
+    taskBookmarks: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "TaskMania",
+      },
+    ],
+    taskOrder: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "TaskMania",
+      },
+    ],
+    pendingEmail: {
+      type: new mongoose.Schema(
+        {
+          email: {
+            type: String,
+            lowercase: true,
+            trim: true,
+          },
+          code: {
+            type: String,
+          },
+          expiresAt: {
+            type: Date,
+          },
+          attempts: {
+            type: Number,
+            default: 0,
+          },
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
   },
 
   { timestamps: true }

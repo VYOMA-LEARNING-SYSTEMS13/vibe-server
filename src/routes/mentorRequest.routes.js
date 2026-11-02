@@ -20,6 +20,7 @@ router.get("/my-requests", getStudentRequests);
 
 // Faculty routes
 router.get("/faculty-requests", getFacultyRequests);
+router.get("/faculty/:facultyId", getFacultyRequests);
 router.patch("/update-status/:requestId", updateRequestStatus);
 
 export default router;
