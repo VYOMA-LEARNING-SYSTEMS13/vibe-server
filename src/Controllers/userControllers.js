@@ -1,6 +1,14 @@
 import { User } from "../models/Users.js";
 import Profile from "../models/Profile.js";
 import SkillVerificationAttempt from "../models/SkillVerificationAttempt.js";
+import SkillVerificationReview from "../models/SkillVerificationReview.js";
+import { Post } from "../models/Post.js";
+import MentorRequest from "../models/MentorRequest.js";
+import { MentorReview } from "../models/MentorReview.js";
+import MentorWorkload from "../models/MentorWorkload.js";
+import { Notification } from "../models/Notification.js";
+import TaskMania from "../models/TaskMania.js";
+import TaskSubmission from "../models/TaskSubmission.js";
 import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
 import fs from "fs";
 import { sendZohoEmail } from "../services/zohoMail.js";
@@ -1040,4 +1048,173 @@ const cancelEmailChange = asyncHandler(async (req, res) => {
   );
 });
 
-export { registerUser, loginUser, updateUser, getUserById, logoutUser, getCurrentUser, sendOtp, forgotPassword, verifyResetOtp, resetPassword, changePassword, requestEmailChange, verifyEmailChange, resendEmailChangeOtp, cancelEmailChange, uploadUserAvatar, removeUserAvatar };
+// Permanently delete user account and associated data
+const deleteAccount = asyncHandler(async (req, res) => {
+  const { password } = req.body || {};
+
+  if (!password) {
+    throw new ApiError(400, "Password is required to delete account");
+  }
+
+  // Identity is derived STRICTLY from active session/token (req.user set by verifyJWT)
+  const userId = req.user?._id;
+  if (!userId) {
+    throw new ApiError(401, "Unauthorized");
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // Verify supplied password against stored password hash
+  const isMatch = await user.isPasswordCorrect(password);
+  if (!isMatch) {
+    throw new ApiError(400, "Current password is incorrect");
+  }
+
+  try {
+    // 1. Clean up user's avatar asset if stored on Cloudinary
+    if (user.ImageUrl) {
+      await deleteFromCloudinary(user.ImageUrl).catch(() => null);
+    }
+
+    // 2. Mentorship requests, reviews & workloads
+    await MentorRequest.deleteMany({
+      $or: [{ student: userId }, { faculty: userId }],
+    });
+    await MentorReview.deleteMany({
+      $or: [{ student: userId }, { faculty: userId }],
+    });
+    await MentorWorkload.deleteMany({ mentorId: userId });
+
+    // 3. Skill verification attempts & reviews
+    await SkillVerificationAttempt.deleteMany({ studentId: userId });
+    await SkillVerificationReview.deleteMany({ mentorId: userId });
+    // Reassign attempts assigned to this faculty back to pool
+    await SkillVerificationAttempt.updateMany(
+      { assignedMentorId: userId, status: { $in: ["under_review", "submitted"] } },
+      {
+        $set: {
+          assignedMentorId: null,
+          status: "submitted",
+          assignedAt: null,
+          reviewDeadline: null,
+        },
+      }
+    );
+    // Remove user from declined faculty lists
+    await SkillVerificationAttempt.updateMany(
+      {},
+      { $pull: { declinedFaculty: { facultyId: userId } } }
+    );
+
+    // 4. Tasks and Submissions
+    // Tasks created by user (Industry Expert)
+    const ownedTasks = await TaskMania.find({ createdBy: userId });
+    const ownedTaskIds = ownedTasks.map((t) => t._id);
+    if (ownedTaskIds.length > 0) {
+      for (const t of ownedTasks) {
+        if (Array.isArray(t.materials)) {
+          for (const m of t.materials) {
+            const assetRef = m.publicId || m.url;
+            if (assetRef) await deleteFromCloudinary(assetRef).catch(() => null);
+          }
+        }
+      }
+      await TaskSubmission.deleteMany({ taskId: { $in: ownedTaskIds } });
+      await User.updateMany(
+        { taskBookmarks: { $in: ownedTaskIds } },
+        { $pull: { taskBookmarks: { $in: ownedTaskIds } } }
+      );
+      await User.updateMany(
+        { taskOrder: { $in: ownedTaskIds } },
+        { $pull: { taskOrder: { $in: ownedTaskIds } } }
+      );
+      await TaskMania.deleteMany({ _id: { $in: ownedTaskIds } });
+    }
+
+    // Submissions created by this user (Student)
+    const userSubmissions = await TaskSubmission.find({ createdBy: userId });
+    const userSubIds = userSubmissions.map((s) => s._id);
+    if (userSubIds.length > 0) {
+      for (const s of userSubmissions) {
+        if (Array.isArray(s.attachments)) {
+          for (const att of s.attachments) {
+            await deleteFromCloudinary(att).catch(() => null);
+          }
+        }
+      }
+      await TaskMania.updateMany(
+        { submissions: { $in: userSubIds } },
+        { $pull: { submissions: { $in: userSubIds } } }
+      );
+      await TaskSubmission.deleteMany({ createdBy: userId });
+    }
+
+    // 5. Community Posts, Comments, and Reactions
+    const userPosts = await Post.find({ author: userId, type: "Post" });
+    const userPostIds = userPosts.map((p) => p._id);
+    if (userPostIds.length > 0) {
+      for (const p of userPosts) {
+        if (Array.isArray(p.attachments)) {
+          for (const att of p.attachments) {
+            await deleteFromCloudinary(att).catch(() => null);
+          }
+        }
+      }
+      await Post.deleteMany({ parent: { $in: userPostIds } });
+      await User.updateMany(
+        { bookmarks: { $in: userPostIds } },
+        { $pull: { bookmarks: { $in: userPostIds } } }
+      );
+      await Post.deleteMany({ _id: { $in: userPostIds } });
+    }
+
+    await Post.deleteMany({ author: userId, type: "Comment" });
+    await Post.updateMany({ reposts: userId }, { $pull: { reposts: userId } });
+    await Post.updateMany(
+      { "reports.reportedBy": userId },
+      { $pull: { reports: { reportedBy: userId } } }
+    );
+    await Post.updateMany(
+      { [`vibes.${userId}`]: { $exists: true } },
+      { $unset: { [`vibes.${userId}`]: "" } }
+    );
+
+    // 6. Notifications
+    await Notification.deleteMany({
+      $or: [{ recipient: userId }, { sender: userId }],
+    });
+
+    // 7. Profile record
+    if (user.Profile) {
+      await Profile.findByIdAndDelete(user.Profile);
+    }
+
+    // 8. Delete User document permanently
+    await User.findByIdAndDelete(userId);
+
+    // 9. Clear authentication cookies
+    const cookieOptions = {
+      httpOnly: true,
+      secure: true,
+    };
+    return res
+      .status(200)
+      .clearCookie("accessToken", cookieOptions)
+      .clearCookie("refreshToken", cookieOptions)
+      .json(
+        new ApiResponse(
+          200,
+          null,
+          "Account and associated data deleted permanently"
+        )
+      );
+  } catch (err) {
+    console.error("Account deletion error:", err);
+    throw new ApiError(500, err.message || "Failed to permanently delete account");
+  }
+});
+
+export { registerUser, loginUser, updateUser, getUserById, logoutUser, getCurrentUser, sendOtp, forgotPassword, verifyResetOtp, resetPassword, changePassword, requestEmailChange, verifyEmailChange, resendEmailChangeOtp, cancelEmailChange, uploadUserAvatar, removeUserAvatar, deleteAccount };
