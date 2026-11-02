@@ -17,6 +17,7 @@ import {
   cancelEmailChange,
   uploadUserAvatar,
   removeUserAvatar,
+  deleteAccount,
 } from "../Controllers/userControllers.js";
 
 import { verifyJWT } from "../middlewares/authMiddleware.js";
@@ -40,6 +41,11 @@ router.post("/request-email-change", verifyJWT, requestEmailChange);
 router.post("/verify-email-change", verifyJWT, verifyEmailChange);
 router.post("/resend-email-change-otp", verifyJWT, resendEmailChangeOtp);
 router.post("/cancel-email-change", verifyJWT, cancelEmailChange);
+
+// Account deletion (DELETE /users/account, DELETE /users/me, POST /users/delete-account)
+router.delete("/account", verifyJWT, deleteAccount);
+router.delete("/me", verifyJWT, deleteAccount);
+router.post("/delete-account", verifyJWT, deleteAccount);
 
 router.post("/verify-token", verifyJWT, (req, res) => {
   res.status(200).json({ message: "Token is valid", user: req.user });
