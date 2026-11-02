@@ -19,6 +19,7 @@ const router = express.Router();
 router.post("/submit", verifyJWT, createSubmission);
 router.get("/task/:taskId", verifyJWT, getSubmissionsByTaskId);
 router.get("/me", verifyJWT, getMySubmissions);
+router.get("/user/:userId", verifyJWT, getMySubmissions);
 router.post("/apply/:taskId", verifyJWT, applyForTask);
 
 router.get("/:id", verifyJWT, getSubmissionById);

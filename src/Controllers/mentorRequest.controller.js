@@ -4,6 +4,7 @@ import TaskMania from "../models/TaskMania.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { notify } from "../services/notify.js";
 import mongoose from "mongoose";
 
 // Create a new Mentor Request
@@ -11,13 +12,19 @@ const createMentorRequest = asyncHandler(async (req, res) => {
   const { facultyId, taskId, message, skills } = req.body;
   const studentId = req.user._id; // from auth middleware
 
+  // Enforce that only students can send mentorship requests
+  const requesterRole = String(req.user.accountType || "").trim().toLowerCase();
+  if (requesterRole !== "student") {
+    throw new ApiError(403, "Only students can request faculty mentorship");
+  }
+
   if (!facultyId || !taskId) {
     throw new ApiError(400, "Faculty ID and Task ID are required");
   }
 
   // Verify that faculty exists and is indeed a faculty member
   const faculty = await User.findById(facultyId);
-  if (!faculty || faculty.accountType !== "faculty") {
+  if (!faculty || String(faculty.accountType || "").trim().toLowerCase() !== "faculty") {
     throw new ApiError(404, "Invalid faculty selected");
   }
 
@@ -46,6 +53,17 @@ const createMentorRequest = asyncHandler(async (req, res) => {
     skills: skills || [],
   });
 
+  // In-app notification for the faculty (fire-and-forget)
+  await notify({
+    recipient: facultyId,
+    sender: studentId,
+    type: "mentor_request",
+    title: "New mentorship request",
+    message: `${req.user?.name || "A student"} requested your mentorship for "${task.title || "a task"}"`,
+    link: "/dashboard/faculty?view=mentorship",
+    meta: { requestId: newRequest._id, taskId },
+  });
+
   return res
     .status(201)
     .json(new ApiResponse(201, newRequest, "Mentor request sent successfully"));
@@ -53,13 +71,21 @@ const createMentorRequest = asyncHandler(async (req, res) => {
 
 // Get all requests for a specific faculty member
 const getFacultyRequests = asyncHandler(async (req, res) => {
-  const facultyId = req.user._id;
+  const targetFacultyId = req.params.facultyId || req.user._id;
+  const isOwner = req.user._id.toString() === targetFacultyId.toString();
 
-  if (req.user.accountType !== "faculty") {
-    throw new ApiError(403, "Only faculty members can view these requests");
+  const query = { faculty: targetFacultyId };
+  if (!isOwner) {
+    // When viewing faculty publicly, only show accepted mentorships
+    query.status = "accepted";
+  } else {
+    const role = String(req.user.accountType || "").trim().toLowerCase();
+    if (role !== "faculty") {
+      throw new ApiError(403, `Only faculty members can view these requests (your accountType is '${req.user.accountType}')`);
+    }
   }
 
-  const requests = await MentorRequest.find({ faculty: facultyId })
+  const requests = await MentorRequest.find(query)
     .populate({
       path: "student",
       select: "name email Profile",
@@ -67,12 +93,20 @@ const getFacultyRequests = asyncHandler(async (req, res) => {
         path: "Profile",
       },
     })
-    .populate("task", "title companyName category lastDateToSubmit roleOffered")
+    .populate({
+      path: "task",
+      select: "title companyName category lastDateToSubmit roleOffered createdBy",
+      populate: {
+        path: "createdBy",
+        select: "name Profile",
+        populate: { path: "Profile", select: "avatar" },
+      },
+    })
     .sort({ createdAt: -1 });
 
   return res
     .status(200)
-    .json(new ApiResponse(200, requests, "Fetched all mentor requests"));
+    .json(new ApiResponse(200, requests || [], "Fetched all mentor requests"));
 });
 
 // Get all requests for a specific student
@@ -127,6 +161,26 @@ const updateRequestStatus = asyncHandler(async (req, res) => {
     }
   }
   await request.save();
+
+  // Resolve recipient user accountType to ensure correct dashboard routing
+  const studentUser = await User.findById(request.student).select("accountType");
+  const studentRole = String(studentUser?.accountType || "student").trim().toLowerCase();
+  const destinationRole = studentRole === "industry expert" ? "industry" : studentRole === "faculty" ? "faculty" : "student";
+  const destinationLink = `/dashboard/${destinationRole}?view=requests`;
+
+  // In-app notification for the student (fire-and-forget)
+  await notify({
+    recipient: request.student,
+    sender: req.user._id,
+    type: status === "accepted" ? "request_accepted" : "request_rejected",
+    title: status === "accepted" ? "Mentorship request accepted" : "Mentorship request declined",
+    message:
+      status === "accepted"
+        ? `${req.user?.name || "Your mentor"} accepted your request${meetLink ? ` — meet link: ${meetLink}` : ""}`
+        : `${req.user?.name || "Your mentor"} declined your mentorship request`,
+    link: destinationLink,
+    meta: { requestId: request._id },
+  });
 
   return res
     .status(200)

@@ -14,6 +14,7 @@ app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
+      if (process.env.NODE_ENV !== "production") return callback(null, true);
       if (allowedOrigins.length === 0) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error("Not allowed by CORS"));
@@ -63,8 +64,11 @@ import userRouter from "./routes/userRoutes.js";
 import postRouter from "./routes/postRoutes.js";
 import taskRouter from "./routes/taskRoutes.js";
 import submissionRouter from "./routes/taskSubmissionRoutes.js";
+import notificationRouter from "./routes/notification.routes.js";
 import virtualresume from "./routes/VirtualResume.js";  
 import mentorRequestRouter from "./routes/mentorRequest.routes.js";
+import skillVerificationRouter from "./routes/skillVerificationRoutes.js";
+import mentorReviewRouter from "./routes/mentorReview.routes.js";
 
 // router declarations
 app.use("/api/v1/mentor-requests", (req, res, next) => {
@@ -75,7 +79,11 @@ app.use("/api/v1/users", checkDbConnection, userRouter);
 app.use("/api/v1/posts", checkDbConnection, postRouter);
 app.use("/api/v1/tasks", checkDbConnection, taskRouter);
 app.use("/api/v1/submissions", checkDbConnection, submissionRouter);
+app.use("/api/v1/notifications", checkDbConnection, notificationRouter);
 app.use("/api/v1/virtualresume", checkDbConnection, virtualresume);
+app.use("/api/v1/virtual-resume", checkDbConnection, virtualresume);
+app.use("/api/v1/skill-verification", checkDbConnection, skillVerificationRouter);
+app.use("/api/v1/mentor-reviews", checkDbConnection, mentorReviewRouter);
 
 // 404 handler
 app.use((req, res) => {
